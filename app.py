@@ -21,7 +21,8 @@ def load_artifacts():
         # but it should be in a Streamlit app script.
         # Fallback to current working directory for local testing if needed.
         script_dir = Path.cwd() 
-        st.warning(f"__file__ not defined, using current working directory: {script_dir}. This might not work as expected on Streamlit Cloud if script is not at repo root.")
+        # This warning might be noisy if running locally not as a direct script
+        # st.warning(f"__file__ not defined, using current working directory: {script_dir}. This might not work as expected on Streamlit Cloud if script is not at repo root.")
 
     artifacts_base_path = script_dir / 'model_artifacts' # Path to the model_artifacts folder
 
@@ -43,26 +44,17 @@ def load_artifacts():
             relative_path_for_error = Path('model_artifacts') / path_obj.name
             missing_files_details.append(f"{name} (expected at ./{relative_path_for_error})")
 
-    # --- Temporary Debugging Info ---
-    st.sidebar.info(f"Debug: Script directory: {str(script_dir)}")
-    st.sidebar.info(f"Debug: Expected artifacts base path: {str(artifacts_base_path)}")
-    if artifacts_base_path.exists() and artifacts_base_path.is_dir():
-        st.sidebar.info(f"Debug: Contents of '{artifacts_base_path.name}': {[p.name for p in artifacts_base_path.iterdir()]}")
-    else:
-        st.sidebar.warning(f"Debug: Artifacts directory '{str(artifacts_base_path)}' does NOT exist or is not a directory.")
-    # List contents of script directory too for context
-    try:
-        st.sidebar.info(f"Debug: Contents of script directory '{script_dir.name}': {[p.name for p in script_dir.iterdir()]}")
-    except Exception as e_ls:
-        st.sidebar.warning(f"Debug: Could not list script directory contents: {e_ls}")
-    # --- End Temporary Debugging Info ---
-
-
     if missing_files_details:
         st.error(f"Error: One or more artifact files are missing. Please ensure these files exist in your repository's 'model_artifacts' folder (relative to your main app script) and are committed to GitHub:")
         for detail in missing_files_details:
             st.error(f"- {detail}")
-        # The debug info above will help diagnose path issues on Streamlit Cloud.
+        # For further debugging on Streamlit Cloud if paths are still an issue:
+        # st.info(f"Debug: Script directory: {str(script_dir)}")
+        # st.info(f"Debug: Expected artifacts base path: {str(artifacts_base_path)}")
+        # if artifacts_base_path.exists() and artifacts_base_path.is_dir():
+        #     st.info(f"Debug: Contents of '{artifacts_base_path.name}': {[p.name for p in artifacts_base_path.iterdir()]}")
+        # else:
+        #     st.warning(f"Debug: Artifacts directory '{str(artifacts_base_path)}' does NOT exist or is not a directory.")
         return None
     
     try:
@@ -98,12 +90,7 @@ It uses a pre-trained Voting Regressor model. Provide current data and data from
 artifacts = load_artifacts()
 
 if artifacts:
-    # Clear the temporary debug messages if loading was successful
-    # This is a bit of a hack for clearing sidebar; usually, you'd control visibility with a state.
-    # For now, let's assume if artifacts load, the debug info has served its purpose for that run.
-    # A better way would be to use st.empty() for debug messages if you want to clear them.
     st.sidebar.success("Model and artifacts loaded successfully!")
-
 
     model = artifacts["model"]
     preprocessor = artifacts["preprocessor"]
@@ -160,8 +147,6 @@ if artifacts:
         input_df = pd.DataFrame([input_data_dict], columns=feature_names_before_preprocessing)
         
         if input_df.isnull().any().any():
-            # st.warning("Some features were not directly provided or imputed initially. " # Less verbose
-            #            "Double-checking imputation for remaining NaNs using training means where possible.")
             for col_idx, col_name in enumerate(input_df.columns): 
                 if input_df[col_name].isnull().any(): 
                     if col_name in train_numerical_feature_means:
@@ -223,39 +208,7 @@ if artifacts:
 
 
 else:
-    # This block will be executed if load_artifacts returns None
-    # The error messages from load_artifacts (including debug info) would have already been displayed.
     st.error("App initialization failed: Could not load model artifacts. Please check the messages above and ensure your 'model_artifacts' folder and its contents are correctly placed in your GitHub repository relative to this script.")
 
 st.markdown("---")
 st.markdown("App using pre-trained model.")
-
-```
-
-**Key changes in the Streamlit app script:**
-
-1.  **Import `pathlib`:** Added `from pathlib import Path`.
-2.  **Dynamic Artifact Path:**
-    * `script_dir = Path(__file__).resolve().parent` gets the directory where your Streamlit app script is located.
-    * `artifacts_base_path = script_dir / 'model_artifacts'` creates the full path to your `model_artifacts` folder.
-3.  **Model Loaded:** Changed `model_filename_to_load` to `'best_voting_model.pkl'`.
-4.  **Path Construction:** Uses `artifacts_base_path / 'filename.pkl'` to create `Path` objects for each artifact.
-5.  **Existence Check:** Uses `path_obj.exists()` to check if files exist.
-6.  **File Opening:** Uses `path_obj.open('rb')` when loading with `joblib.load()`.
-7.  **Debugging Info:** Added `st.sidebar.info(...)` lines within `load_artifacts`. When you deploy this to Streamlit Cloud, these messages will appear in the sidebar and tell you:
-    * The resolved script directory.
-    * The resolved path to the `model_artifacts` folder.
-    * The list of files it finds within that `model_artifacts` folder (if the folder itself is found).
-    * The list of files/folders it finds in the script's directory.
-
-**What to do:**
-
-1.  Replace your current Streamlit app script with this updated version.
-2.  Commit and push this change to your GitHub repository.
-3.  Let Streamlit Cloud redeploy.
-4.  Check the app and its sidebar for the debug messages. This information will be crucial:
-    * If the "Contents of 'model_artifacts'" shows your `.pkl` files, then the paths are correct, and any loading error would be with `joblib.load` itself (e.g., corrupted file).
-    * If "Contents of 'model_artifacts'" is empty or the "Artifacts directory ... does NOT exist" message appears, it means Streamlit Cloud isn't seeing your `model_artifacts` folder where the script expects it (i.e., `your_repo_root/model_artifacts/`). This could point to an issue with your GitHub repository structure or how Streamlit Cloud clones/accesses it.
-    * Compare the "Script directory" and "Artifacts base path" with your GitHub repo structure.
-
-This should help pinpoint exactly where the path resolution is failing in the Streamlit Cloud environment. Once it's working, you can remove the temporary `st.sidebar.info(...)` debug lin
