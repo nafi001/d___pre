@@ -4,47 +4,80 @@ import numpy as np
 import joblib
 import os
 from datetime import datetime, timedelta
+from pathlib import Path # Import pathlib
 
 # --- Configuration ---
-ARTIFACTS_DIR = 'model_artifacts' 
+# ARTIFACTS_DIR is now defined dynamically relative to the script file
 
 # --- Load Artifacts ---
 @st.cache_resource 
 def load_artifacts():
     """Loads the pre-trained model, preprocessor, and other necessary artifacts."""
-    model_path = os.path.join(ARTIFACTS_DIR, 'best_voting_model.pkl')
-    preprocessor_path = os.path.join(ARTIFACTS_DIR, 'preprocessor.pkl')
-    features_before_path = os.path.join(ARTIFACTS_DIR, 'feature_names_before_preprocessing.pkl')
-    train_means_path = os.path.join(ARTIFACTS_DIR, 'train_numerical_feature_means.pkl')
-    meteo_cols_path = os.path.join(ARTIFACTS_DIR, 'meteo_cols_used.pkl')
-    target_col_path = os.path.join(ARTIFACTS_DIR, 'target_col_name.pkl')
+    try:
+        # Get the directory of the current script file
+        script_dir = Path(__file__).resolve().parent
+    except NameError:
+        # __file__ might not be defined in some interactive environments,
+        # but it should be in a Streamlit app script.
+        # Fallback to current working directory for local testing if needed.
+        script_dir = Path.cwd() 
+        st.warning(f"__file__ not defined, using current working directory: {script_dir}. This might not work as expected on Streamlit Cloud if script is not at repo root.")
+
+    artifacts_base_path = script_dir / 'model_artifacts' # Path to the model_artifacts folder
+
+    model_filename_to_load = 'best_voting_model.pkl' # Explicitly load the Voting Regressor model
+
+    paths_to_check = {
+        "model": artifacts_base_path / model_filename_to_load,
+        "preprocessor": artifacts_base_path / 'preprocessor.pkl',
+        "features_before": artifacts_base_path / 'feature_names_before_preprocessing.pkl',
+        "train_means": artifacts_base_path / 'train_numerical_feature_means.pkl',
+        "meteo_cols": artifacts_base_path / 'meteo_cols_used.pkl',
+        "target_col": artifacts_base_path / 'target_col_name.pkl'
+    }
+
+    missing_files_details = []
+    for name, path_obj in paths_to_check.items():
+        if not path_obj.exists():
+            # Store the relative path for a cleaner error message to the user
+            relative_path_for_error = Path('model_artifacts') / path_obj.name
+            missing_files_details.append(f"{name} (expected at ./{relative_path_for_error})")
+
+    # --- Temporary Debugging Info ---
+    st.sidebar.info(f"Debug: Script directory: {str(script_dir)}")
+    st.sidebar.info(f"Debug: Expected artifacts base path: {str(artifacts_base_path)}")
+    if artifacts_base_path.exists() and artifacts_base_path.is_dir():
+        st.sidebar.info(f"Debug: Contents of '{artifacts_base_path.name}': {[p.name for p in artifacts_base_path.iterdir()]}")
+    else:
+        st.sidebar.warning(f"Debug: Artifacts directory '{str(artifacts_base_path)}' does NOT exist or is not a directory.")
+    # List contents of script directory too for context
+    try:
+        st.sidebar.info(f"Debug: Contents of script directory '{script_dir.name}': {[p.name for p in script_dir.iterdir()]}")
+    except Exception as e_ls:
+        st.sidebar.warning(f"Debug: Could not list script directory contents: {e_ls}")
+    # --- End Temporary Debugging Info ---
 
 
-    required_files = [model_path, preprocessor_path, features_before_path, train_means_path, meteo_cols_path, target_col_path]
-    if not all(os.path.exists(p) for p in required_files):
-        missing_files = [p for p in required_files if not os.path.exists(p)]
-        st.error(f"Error: One or more artifact files are missing from the '{ARTIFACTS_DIR}' directory: {missing_files}. "
-                 "Please run the training script first to generate these files.")
+    if missing_files_details:
+        st.error(f"Error: One or more artifact files are missing. Please ensure these files exist in your repository's 'model_artifacts' folder (relative to your main app script) and are committed to GitHub:")
+        for detail in missing_files_details:
+            st.error(f"- {detail}")
+        # The debug info above will help diagnose path issues on Streamlit Cloud.
         return None
     
     try:
-        model = joblib.load(model_path)
-        preprocessor = joblib.load(preprocessor_path)
-        feature_names_before_preprocessing = joblib.load(features_before_path)
-        train_numerical_feature_means = joblib.load(train_means_path)
-        meteo_cols_used = joblib.load(meteo_cols_path)
-        target_col_name = joblib.load(target_col_path)
+        loaded_artifacts = {}
+        loaded_artifacts["model"] = joblib.load(paths_to_check["model"].open('rb'))
+        loaded_artifacts["preprocessor"] = joblib.load(paths_to_check["preprocessor"].open('rb'))
+        loaded_artifacts["feature_names_before"] = joblib.load(paths_to_check["features_before"].open('rb'))
+        loaded_artifacts["train_numerical_means"] = joblib.load(paths_to_check["train_means"].open('rb'))
+        loaded_artifacts["meteo_cols"] = joblib.load(paths_to_check["meteo_cols"].open('rb'))
+        loaded_artifacts["target_col"] = joblib.load(paths_to_check["target_col"].open('rb'))
         
-        return {
-            "model": model,
-            "preprocessor": preprocessor,
-            "feature_names_before": feature_names_before_preprocessing,
-            "train_numerical_means": train_numerical_feature_means,
-            "meteo_cols": meteo_cols_used,
-            "target_col": target_col_name
-        }
+        return loaded_artifacts
     except Exception as e:
-        st.error(f"Error loading artifacts: {e}")
+        st.error(f"Error loading artifacts after confirming existence: {e}")
+        st.error(f"An error occurred while trying to open/read the .pkl files. Ensure they are not corrupted and were generated correctly.")
         return None
 
 # --- Helper function to get season ---
@@ -59,26 +92,30 @@ st.set_page_config(layout="wide")
 st.title("Dengue Case Prediction (7 Days Ahead)")
 st.markdown("""
 This app predicts the number of dengue cases 7 days from a specified 'current date'.
-It uses a pre-trained XGBoost model. Provide current data and data from 7 days ago.
+It uses a pre-trained Voting Regressor model. Provide current data and data from 7 days ago.
 """)
 
 artifacts = load_artifacts()
 
 if artifacts:
+    # Clear the temporary debug messages if loading was successful
+    # This is a bit of a hack for clearing sidebar; usually, you'd control visibility with a state.
+    # For now, let's assume if artifacts load, the debug info has served its purpose for that run.
+    # A better way would be to use st.empty() for debug messages if you want to clear them.
     st.sidebar.success("Model and artifacts loaded successfully!")
+
 
     model = artifacts["model"]
     preprocessor = artifacts["preprocessor"]
     feature_names_before_preprocessing = artifacts["feature_names_before"]
     train_numerical_feature_means = artifacts["train_numerical_means"]
     METEO_COLS_USED = artifacts["meteo_cols"]
-    TARGET_COL_NAME = artifacts["target_col"] # Loaded from artifact
+    TARGET_COL_NAME = artifacts["target_col"] 
 
     st.sidebar.header("Input Data for Prediction")
     current_input_date = st.sidebar.date_input("Current Date for Input Data", datetime.today())
     
     st.sidebar.subheader("Today's Data (Day D)")
-    # Use TARGET_COL_NAME for default value lookup
     current_dengue_cases_default = int(train_numerical_feature_means.get(TARGET_COL_NAME, 50))
     current_dengue_cases = st.sidebar.number_input(f"{TARGET_COL_NAME.replace('_', ' ').title()} (Today)", min_value=0, value=current_dengue_cases_default)
     
@@ -123,13 +160,13 @@ if artifacts:
         input_df = pd.DataFrame([input_data_dict], columns=feature_names_before_preprocessing)
         
         if input_df.isnull().any().any():
-            st.warning("Some features were not directly provided or imputed initially. "
-                       "Double-checking imputation for remaining NaNs using training means where possible.")
-            for col_idx, col_name in enumerate(input_df.columns): # Iterate by name for clarity
-                if input_df[col_name].isnull().any(): # Check if this specific column has NaN
+            # st.warning("Some features were not directly provided or imputed initially. " # Less verbose
+            #            "Double-checking imputation for remaining NaNs using training means where possible.")
+            for col_idx, col_name in enumerate(input_df.columns): 
+                if input_df[col_name].isnull().any(): 
                     if col_name in train_numerical_feature_means:
                         input_df[col_name] = input_df[col_name].fillna(train_numerical_feature_means[col_name])
-                    else: # Fallback for categoricals (should be set) or unexpected NaNs
+                    else: 
                         st.error(f"Feature '{col_name}' is still NaN after initial imputation and has no mean value. Prediction might be inaccurate. Filling with 0 as last resort.")
                         input_df[col_name] = input_df[col_name].fillna(0)
 
@@ -167,7 +204,7 @@ if artifacts:
             display_cols.extend([TARGET_COL_NAME] + METEO_COLS_USED) 
             display_cols.extend([f"{TARGET_COL_NAME}_lag_7"] + [f"{m}_lag_7" for m in METEO_COLS_USED]) 
             display_cols.extend(['month', 'year', 'day_of_week', 'season']) 
-            if METEO_COLS_USED: # Ensure METEO_COLS_USED is not empty
+            if METEO_COLS_USED: 
                 example_roll_col = f"{METEO_COLS_USED[0]}_roll_mean_7" 
                 if example_roll_col in input_df.columns:
                     display_cols.append(example_roll_col)
@@ -186,16 +223,39 @@ if artifacts:
 
 
 else:
-    st.warning("Could not load model artifacts. Please ensure the training script has been run successfully and artifacts are in the correct directory ('model_artifacts/').")
+    # This block will be executed if load_artifacts returns None
+    # The error messages from load_artifacts (including debug info) would have already been displayed.
+    st.error("App initialization failed: Could not load model artifacts. Please check the messages above and ensure your 'model_artifacts' folder and its contents are correctly placed in your GitHub repository relative to this script.")
 
 st.markdown("---")
 st.markdown("App using pre-trained model.")
 
+```
 
-#**Before running:**
+**Key changes in the Streamlit app script:**
 
-#1.  **Place `de.csv`:** Make sure the `de.csv` file is in the same directory where you will run the `train_dengue_model.py` script (the first script).
-#2.  **Run Training First:** Execute the first script (e.g., `python train_dengue_model.py`). This will read `de.csv`, train the model, and save the artifacts in the `model_artifacts` folder.
-#3.  **Run Streamlit App:** Then, run the second script (e.g., `streamlit run app_dengue_predictor.py`). It will load the artifacts and launch the web application.
+1.  **Import `pathlib`:** Added `from pathlib import Path`.
+2.  **Dynamic Artifact Path:**
+    * `script_dir = Path(__file__).resolve().parent` gets the directory where your Streamlit app script is located.
+    * `artifacts_base_path = script_dir / 'model_artifacts'` creates the full path to your `model_artifacts` folder.
+3.  **Model Loaded:** Changed `model_filename_to_load` to `'best_voting_model.pkl'`.
+4.  **Path Construction:** Uses `artifacts_base_path / 'filename.pkl'` to create `Path` objects for each artifact.
+5.  **Existence Check:** Uses `path_obj.exists()` to check if files exist.
+6.  **File Opening:** Uses `path_obj.open('rb')` when loading with `joblib.load()`.
+7.  **Debugging Info:** Added `st.sidebar.info(...)` lines within `load_artifacts`. When you deploy this to Streamlit Cloud, these messages will appear in the sidebar and tell you:
+    * The resolved script directory.
+    * The resolved path to the `model_artifacts` folder.
+    * The list of files it finds within that `model_artifacts` folder (if the folder itself is found).
+    * The list of files/folders it finds in the script's directory.
 
-#I've added more robust checks for column existence and warnings in the training script. The app now also loads the `target_col_name.pkl` to be absolutely sure about the target column's name when constructing feature keys for user input and display. The parameter grid for `GridSearchCV` in the training script is slightly reduced for faster execution during this update; you can expand it again for a more thorough hyperparameter sear
+**What to do:**
+
+1.  Replace your current Streamlit app script with this updated version.
+2.  Commit and push this change to your GitHub repository.
+3.  Let Streamlit Cloud redeploy.
+4.  Check the app and its sidebar for the debug messages. This information will be crucial:
+    * If the "Contents of 'model_artifacts'" shows your `.pkl` files, then the paths are correct, and any loading error would be with `joblib.load` itself (e.g., corrupted file).
+    * If "Contents of 'model_artifacts'" is empty or the "Artifacts directory ... does NOT exist" message appears, it means Streamlit Cloud isn't seeing your `model_artifacts` folder where the script expects it (i.e., `your_repo_root/model_artifacts/`). This could point to an issue with your GitHub repository structure or how Streamlit Cloud clones/accesses it.
+    * Compare the "Script directory" and "Artifacts base path" with your GitHub repo structure.
+
+This should help pinpoint exactly where the path resolution is failing in the Streamlit Cloud environment. Once it's working, you can remove the temporary `st.sidebar.info(...)` debug lin
