@@ -12,7 +12,7 @@ ARTIFACTS_DIR = 'model_artifacts'
 @st.cache_resource 
 def load_artifacts():
     """Loads the pre-trained model, preprocessor, and other necessary artifacts."""
-    model_path = os.path.join(ARTIFACTS_DIR, 'best_xgb_model.pkl')
+    model_path = os.path.join(ARTIFACTS_DIR, 'best_voting_model.pkl')
     preprocessor_path = os.path.join(ARTIFACTS_DIR, 'preprocessor.pkl')
     features_before_path = os.path.join(ARTIFACTS_DIR, 'feature_names_before_preprocessing.pkl')
     train_means_path = os.path.join(ARTIFACTS_DIR, 'train_numerical_feature_means.pkl')
