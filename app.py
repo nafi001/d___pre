@@ -190,12 +190,12 @@ else:
 
 st.markdown("---")
 st.markdown("App using pre-trained model.")
-```
 
-**Before running:**
 
-1.  **Place `de.csv`:** Make sure the `de.csv` file is in the same directory where you will run the `train_dengue_model.py` script (the first script).
-2.  **Run Training First:** Execute the first script (e.g., `python train_dengue_model.py`). This will read `de.csv`, train the model, and save the artifacts in the `model_artifacts` folder.
-3.  **Run Streamlit App:** Then, run the second script (e.g., `streamlit run app_dengue_predictor.py`). It will load the artifacts and launch the web application.
+#**Before running:**
 
-I've added more robust checks for column existence and warnings in the training script. The app now also loads the `target_col_name.pkl` to be absolutely sure about the target column's name when constructing feature keys for user input and display. The parameter grid for `GridSearchCV` in the training script is slightly reduced for faster execution during this update; you can expand it again for a more thorough hyperparameter sear
+#1.  **Place `de.csv`:** Make sure the `de.csv` file is in the same directory where you will run the `train_dengue_model.py` script (the first script).
+#2.  **Run Training First:** Execute the first script (e.g., `python train_dengue_model.py`). This will read `de.csv`, train the model, and save the artifacts in the `model_artifacts` folder.
+#3.  **Run Streamlit App:** Then, run the second script (e.g., `streamlit run app_dengue_predictor.py`). It will load the artifacts and launch the web application.
+
+#I've added more robust checks for column existence and warnings in the training script. The app now also loads the `target_col_name.pkl` to be absolutely sure about the target column's name when constructing feature keys for user input and display. The parameter grid for `GridSearchCV` in the training script is slightly reduced for faster execution during this update; you can expand it again for a more thorough hyperparameter sear
